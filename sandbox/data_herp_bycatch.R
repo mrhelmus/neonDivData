@@ -104,19 +104,47 @@ include_zeros <- FALSE # Still need to figure out the zeros... is there a NULL t
 
 #################################################################################
 my_dpid <- 'DP1.10022.001' # beetle dpid to get herp bycatch
-my_site_list <- c('BART') # start with just one 
+my_site_list <- c('BART','LAJA') # start with just one 
 
 bycatch_raw <- neonUtilities::loadByProduct(
   dpID = my_dpid,
   site = my_site_list,
   check.size = FALSE#,
-#  package = "expanded"
+  #package = "expanded"
   ) # if there is a problem in the later code then use expanded
 
-# bet_fielddata has sampleID for all samples that were taken this can be used to 
-# add zeros back in the herp data
-# includes location and lat long data
-bet_fielddata <- bycatch_raw$bet_fielddata
+ # Kari's Mode function helper function to calculate mode of a column/vector
+Mode <- function(x) {
+  ux <- unique(x)
+  ux[which.max(tabulate(match(x, ux)))]
+}
+
+### Wrangle Field Data ### 
+# Edited From Kari's code
+
+# 1. Get the fielddata table that contains metadata for all sampling events.
+# 1. Clean eventID that provides the unique key for the events.
+# 1. Select the important variables and toss the rest.
+# 1. Calculate trappingDays as the length of time a pitfall trap was set
+
+tidy_fielddata <- tibble::as_tibble(bycatch_raw$bet_fielddata) %>% # get fielddata
+  dplyr::select(sampleID, # select needed variables
+                domainID,
+                siteID,
+                namedLocation,
+                trapID,
+                setDate,
+                collectDate,
+                eventID,
+                trappingDays) %>%
+  dplyr::mutate(eventID =   # remove periods from eventID's (cleans an inconsistency)
+                  stringr::str_remove_all(eventID, "[.]")) %>%
+  dplyr::mutate(trappingDays = # add sampling effort in days (trappingdays)
+                  lubridate::interval(lubridate::ymd(setDate),
+                                      lubridate::ymd(collectDate)) %/%
+                  lubridate::days(1))
+
+# STOPPED HERE STOPPED HERE
 
 # get actual sampling data
 herp_sorting<- bycatch_raw$bet_sorting %>% filter(sampleType == "vert bycatch herp")

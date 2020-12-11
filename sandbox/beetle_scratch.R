@@ -5,7 +5,7 @@
 #   
 #   # download data
   beetles_raw <- neonUtilities::loadByProduct(dpID = neon.data.product.id,
-                                              site = 'BART')
+                                              site = c('BART','LAJA'))
   
   # helper function to calculate mode of a column/vector
   Mode <- function(x) {
