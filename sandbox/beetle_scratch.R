@@ -5,7 +5,7 @@
 #   
 #   # download data
   beetles_raw <- neonUtilities::loadByProduct(dpID = neon.data.product.id,
-                                              site = c('BART','LAJA'))
+                                              site = c('BLAN','LAJA','SERC'))
   
   # helper function to calculate mode of a column/vector
   Mode <- function(x) {
@@ -17,7 +17,7 @@
   
   # start with the fielddata table, which describes all sampling events
   data_beetles <- tibble::as_tibble(beetles_raw$bet_fielddata) %>%
-    dplyr::select(sampleID, domainID, siteID, namedLocation,
+    dplyr::select(sampleID, domainID, siteID, namedLocation, plotID,
                   trapID, setDate, collectDate, eventID, trappingDays) %>%
     # eventID's are inconsistently separated by periods, so we remove them
     dplyr::mutate(eventID = stringr::str_remove_all(eventID, "[.]")) %>%

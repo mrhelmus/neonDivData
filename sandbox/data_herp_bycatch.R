@@ -84,36 +84,31 @@ STOPPED HERE
 #' @importFrom tibble tibble
 NULL
 
-# OLD CODE
+
+
+
+#<>< HERE IS THE CODE
+
 
 library(tidyverse)
-
-# Install and load devtools
-# install.packages("devtools")
-library(devtools)
-
-# Install and load dev version of ecocomDP
-# install_github("EDIorg/ecocomDP", ref = 'development')
-library(ecocomDP)
-
-# Install and load neonUtilities
-# install_github("NEONScience/NEON-utilities/neonUtilities", dependencies=TRUE)
 library(neonUtilities)
-
-include_zeros <- FALSE # Still need to figure out the zeros... is there a NULL taxonID?
+library(devtools)
+load_all()
 
 #################################################################################
 my_dpid <- 'DP1.10022.001' # beetle dpid to get herp bycatch
-my_site_list <- c('BART','LAJA') # start with just one 
+my_site_list <- c('BLAN','LAJA','SERC') # start with just one 
+
+bycatch_raw <- beetles_raw
 
 bycatch_raw <- neonUtilities::loadByProduct(
   dpID = my_dpid,
   site = my_site_list,
   check.size = FALSE#,
   #package = "expanded"
-  ) # if there is a problem in the later code then use expanded
+) # if there is a problem in the later code then use expanded
 
- # Kari's Mode function helper function to calculate mode of a column/vector
+# Kari's Mode function helper function to calculate mode of a column/vector
 Mode <- function(x) {
   ux <- unique(x)
   ux[which.max(tabulate(match(x, ux)))]
@@ -132,6 +127,7 @@ tidy_fielddata <- tibble::as_tibble(bycatch_raw$bet_fielddata) %>% # get fieldda
                 domainID,
                 siteID,
                 namedLocation,
+                plotID,
                 trapID,
                 setDate,
                 collectDate,
@@ -143,6 +139,58 @@ tidy_fielddata <- tibble::as_tibble(bycatch_raw$bet_fielddata) %>% # get fieldda
                   lubridate::interval(lubridate::ymd(setDate),
                                       lubridate::ymd(collectDate)) %/%
                   lubridate::days(1))
+
+# Find the traps that have multiple collectDates/bouts for the same setDate
+# need to calculate their trap days from the previous collectDate, not the setDate
+adjTrappingDays <- tidy_fielddata %>%
+  select(namedLocation, # select needed variables 
+         trapID, 
+         setDate, 
+         collectDate, 
+         trappingDays, 
+         eventID
+         ) %>%
+  group_by(namedLocation, trapID, setDate) %>%
+  filter(n_distinct(collectDate) > 1) %>% # filter those with more than one
+  mutate(diffTrappingDays = trappingDays - min(trappingDays)) %>%
+  mutate(adjTrappingDays = 
+           case_when(diffTrappingDays == 0 ~ trappingDays,TRUE ~ diffTrappingDays)) %>%
+  select(-c(trappingDays, diffTrappingDays))
+
+
+#STOPPED STOPPED 
+
+
+data_beetles <- data_beetles %>%
+  #update with adjusted trapping days where needed
+  left_join(adjTrappingDays) %>%
+  mutate(trappingDays = case_when(
+    !is.na(adjTrappingDays) ~ adjTrappingDays,
+    TRUE ~ trappingDays
+  )) %>%
+  select(-adjTrappingDays, -setDate) %>%
+  # for some eventID's (bouts) collection happened over two days,
+  # change collectDate to the date that majority of traps were collected on
+  dplyr::group_by(eventID) %>%
+  dplyr::mutate(collectDate = Mode(collectDate)) %>%
+  dplyr::ungroup() %>%
+  # there are also some sites for which all traps were set and collect on the same date, but have multiple eventID's
+  # we want to consider that as all one bout so we create a new ID based on the site and collectDate
+  tidyr::unite(boutID, siteID, collectDate, remove = FALSE) %>%
+  dplyr::select(-eventID) %>%
+  # join with bet_sorting, which describes the beetles in each sample
+  dplyr::left_join(beetles_raw$bet_sorting %>%
+                     # only want carabid samples, not bycatch
+                     dplyr::filter(sampleType %in% c("carabid", "other carabid")) %>%
+                     dplyr::select(sampleID, subsampleID, sampleType, taxonID,
+                                   scientificName, taxonRank, identificationReferences,
+                                   individualCount),
+                   by = "sampleID")
+
+
+
+
+
 
 # STOPPED HERE STOPPED HERE
 
@@ -188,7 +236,7 @@ table_observation <- herp_sorting %>%
                   lubridate::interval(lubridate::ymd(setDate),
                                       lubridate::ymd(collectDate)) %/% 
                   lubridate::days(1)
-                ) %>%
+  ) %>%
   select(sampleID,
          siteID,
          plotID,
