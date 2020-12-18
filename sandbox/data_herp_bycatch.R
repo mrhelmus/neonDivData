@@ -42,7 +42,7 @@
 "data_beetle"
 
 
-STOPPED HERE 
+# STOPPED HERE 
 #' 1. Removed 1 m^2 data with `targetTaxaPresent = N`
 #' 2. Removed rows without plotID, subplotID, boutNumber, endDate, and/or taxonID
 #' 3. Removed duplicate taxa between nested subplots (each taxon should be represented once for the bout/plotID/year). For example, if a taxon/date/bout/plot combo is present in 1 m^2 data, remove from 10 m^2 and above
@@ -73,7 +73,7 @@ STOPPED HERE
 #' - `sample_area_m2`: The area of the sampling unit that the observed plant was located in.
 #' - `subplot_id`: Subplot ID; one plot normally has four 100 m^2 subplots (31, 32, 40, 41).
 #' - `subsubplot_id`: Subsubplot ID (1, 2, 3, 4) for sampling units at 1 m^2 or 10 m^2.
-STOPPED HERE 
+# STOPPED HERE 
 
 #'
 #' @source <https://data.neonscience.org>
@@ -99,7 +99,7 @@ load_all()
 my_dpid <- 'DP1.10022.001' # beetle dpid to get herp bycatch
 my_site_list <- c('BLAN','LAJA','SERC') # start with just one 
 
-bycatch_raw <- beetles_raw
+bycatch_raw <- beetles_raw_big
 
 bycatch_raw <- neonUtilities::loadByProduct(
   dpID = my_dpid,
@@ -140,8 +140,14 @@ tidy_fielddata <- tibble::as_tibble(bycatch_raw$bet_fielddata) %>% # get fieldda
                                       lubridate::ymd(collectDate)) %/%
                   lubridate::days(1))
 
-# Find the traps that have multiple collectDates/bouts for the same setDate
-# need to calculate their trap days from the previous collectDate, not the setDate
+# 1. Make object with cleaned up serial bouts
+# There are some traps that have multiple bouts for the same setDate. This is 
+# indicated by having the same setDate but different collectDates for a trap.
+# This indicates that the traps were reset to being open and sampling after a bout.
+# This serial sampling can also be seen by having unique eventIDs for each of these
+# serial bouts. To remedy this situation, trapping days should be calculated from
+# the previous collectDate, not the recorded setDate. To do this:
+
 adjTrappingDays <- tidy_fielddata %>%
   select(namedLocation, # select needed variables 
          trapID, 
@@ -152,18 +158,25 @@ adjTrappingDays <- tidy_fielddata %>%
          ) %>%
   group_by(namedLocation, trapID, setDate) %>%
   filter(n_distinct(collectDate) > 1) %>% # filter those with more than one
-  mutate(diffTrappingDays = trappingDays - min(trappingDays)) %>%
-  mutate(adjTrappingDays = 
-           case_when(diffTrappingDays == 0 ~ trappingDays,TRUE ~ diffTrappingDays)) %>%
-  select(-c(trappingDays, diffTrappingDays))
+  mutate(totalSerialBouts = n_distinct(collectDate)) 
 
+# If the total setDates for any serial bout is >2 then the code below may not work.
+print(paste("The max serial bouts for aby trap is", max(adjTrappingDays$totalSerialBouts)))
 
-#STOPPED STOPPED 
+adjTrappingDays <- adjTrappingDays %>%
+  mutate(diffTrappingDays = # as long as there are only 2 bouts this works
+           trappingDays - min(trappingDays)) %>% 
+  mutate(adjTrappingDays = # if the difference is 0 then trappingDays
+           case_when(diffTrappingDays == 0 ~ trappingDays, 
+                     TRUE ~ diffTrappingDays)) %>% # otherwise use the difference
+  select(-c(trappingDays, diffTrappingDays, totalSerialBouts))
 
+# It is unclear if those long bouts are correct or not
+table(adjTrappingDays$adjTrappingDays)
 
+# 1. 
 data_beetles <- data_beetles %>%
-  #update with adjusted trapping days where needed
-  left_join(adjTrappingDays) %>%
+  left_join(adjTrappingDays) %>% # join trapping days to adjTrappingDays 
   mutate(trappingDays = case_when(
     !is.na(adjTrappingDays) ~ adjTrappingDays,
     TRUE ~ trappingDays
