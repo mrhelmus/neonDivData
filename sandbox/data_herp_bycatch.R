@@ -168,20 +168,35 @@ adjTrappingDays <- adjTrappingDays %>%
            trappingDays - min(trappingDays)) %>% 
   mutate(adjTrappingDays = # if the difference is 0 then trappingDays
            case_when(diffTrappingDays == 0 ~ trappingDays, 
-                     TRUE ~ diffTrappingDays)) %>% # otherwise use the difference
-  select(-c(trappingDays, diffTrappingDays, totalSerialBouts))
+                     TRUE ~ diffTrappingDays)) # otherwise use the difference
 
-# It is unclear if those long bouts are correct or not
+# It is unclear if those long bouts or those 0 bouts are correct or not, 
+# but for now leave in data
 table(adjTrappingDays$adjTrappingDays)
 
-# 1. 
-data_beetles <- data_beetles %>%
-  left_join(adjTrappingDays) %>% # join trapping days to adjTrappingDays 
-  mutate(trappingDays = case_when(
-    !is.na(adjTrappingDays) ~ adjTrappingDays,
-    TRUE ~ trappingDays
-  )) %>%
-  select(-adjTrappingDays, -setDate) %>%
+filter(adjTrappingDays, adjTrappingDays == 0) # there are some that were set for one day
+filter(adjTrappingDays, adjTrappingDays > 21) %>% print(n=200) # some that were set for a long time
+
+# 1. Drop some columns from adjTrappingDays
+adjTrappingDays <- adjTrappingDays %>% # drop some columns
+  select(-c(trappingDays, diffTrappingDays, totalSerialBouts))
+
+# 1. Join trapping days to adjTrappingDays
+tidy_fielddata <- tidy_fielddata %>%
+  left_join(adjTrappingDays) 
+
+filter(adjTrappingDays, !is.na(adjTrappingDays)) %>% print(n=200) # check the data
+
+#1. Adjust the trapping days
+tidy_fielddata <- tidy_fielddata %>% 
+  mutate(trappingDays = 
+           case_when(!is.na(adjTrappingDays) ~ adjTrappingDays, # use adjTrappingDays
+                     TRUE ~ trappingDays # otherwise just use trappingDays
+  )) %>% select(-adjTrappingDays, -setDate) # clean up the variables
+
+
+
+tidy_fielddata <- tidy_fielddata %>%
   # for some eventID's (bouts) collection happened over two days,
   # change collectDate to the date that majority of traps were collected on
   dplyr::group_by(eventID) %>%
