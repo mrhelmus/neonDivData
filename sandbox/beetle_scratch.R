@@ -59,7 +59,7 @@
     # join with bet_sorting, which describes the beetles in each sample
     dplyr::left_join(beetles_raw$bet_sorting %>%
                        # only want carabid samples, not bycatch
-                       dplyr::filter(sampleType %in% c("carabid", "other carabid")) %>%
+                      # dplyr::filter(sampleType %in% c("carabid", "other carabid")) %>%
                        dplyr::select(sampleID, subsampleID, sampleType, taxonID,
                                      scientificName, taxonRank, identificationReferences,
                                      individualCount),

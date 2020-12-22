@@ -99,7 +99,7 @@ load_all()
 my_dpid <- 'DP1.10022.001' # beetle dpid to get herp bycatch
 my_site_list <- c('BLAN','LAJA','SERC') # start with just one 
 
-bycatch_raw <- beetles_raw_big
+bycatch_raw <- beetles_raw <- beetles_raw_big
 
 bycatch_raw <- neonUtilities::loadByProduct(
   dpID = my_dpid,
@@ -108,11 +108,6 @@ bycatch_raw <- neonUtilities::loadByProduct(
   #package = "expanded"
 ) # if there is a problem in the later code then use expanded
 
-# Kari's Mode function helper function to calculate mode of a column/vector
-Mode <- function(x) {
-  ux <- unique(x)
-  ux[which.max(tabulate(match(x, ux)))]
-}
 
 ### Wrangle Field Data ### 
 # Edited From Kari's code
@@ -123,18 +118,26 @@ Mode <- function(x) {
 # 1. Calculate trappingDays as the length of time a pitfall trap was set
 
 tidy_fielddata <- tibble::as_tibble(bycatch_raw$bet_fielddata) %>% # get fielddata
-  dplyr::select(sampleID, # select needed variables
+  dplyr::select(namedLocation,  # select needed variables
                 domainID,
                 siteID,
-                namedLocation,
                 plotID,
                 trapID,
+                nlcdClass,
+                decimalLatitude,
+                decimalLongitude,
+                elevation,
                 setDate,
                 collectDate,
                 eventID,
-                trappingDays) %>%
-  dplyr::mutate(eventID =   # remove periods from eventID's (cleans an inconsistency)
-                  stringr::str_remove_all(eventID, "[.]")) %>%
+                trappingDays,
+                sampleCollected,
+                sampleID,
+                sampleCondition,
+                samplingImpractical,
+                remarksFielddata = remarks) %>%
+  dplyr::mutate(eventID_raw = eventID, 
+                eventID = stringr::str_remove_all(eventID, "[.]")) %>% # remove periods from eventID's (cleans an inconsistency)
   dplyr::mutate(trappingDays = # add sampling effort in days (trappingdays)
                   lubridate::interval(lubridate::ymd(setDate),
                                       lubridate::ymd(collectDate)) %/%
@@ -160,9 +163,11 @@ adjTrappingDays <- tidy_fielddata %>%
   filter(n_distinct(collectDate) > 1) %>% # filter those with more than one
   mutate(totalSerialBouts = n_distinct(collectDate)) 
 
-# If the total setDates for any serial bout is >2 then the code below may not work.
-print(paste("The max serial bouts for aby trap is", max(adjTrappingDays$totalSerialBouts)))
+# check the data
+# If the total setDates for any serial bout is >2 then the code may not work.
+print(paste("The max serial bouts for any trap is", max(adjTrappingDays$totalSerialBouts)))
 
+#1. take the difference and use this as the new trapping days
 adjTrappingDays <- adjTrappingDays %>%
   mutate(diffTrappingDays = # as long as there are only 2 bouts this works
            trappingDays - min(trappingDays)) %>% 
@@ -170,10 +175,10 @@ adjTrappingDays <- adjTrappingDays %>%
            case_when(diffTrappingDays == 0 ~ trappingDays, 
                      TRUE ~ diffTrappingDays)) # otherwise use the difference
 
-# It is unclear if those long bouts or those 0 bouts are correct or not, 
+# check the data
+# There are long bouts and 0 day bouts, 
 # but for now leave in data
 table(adjTrappingDays$adjTrappingDays)
-
 filter(adjTrappingDays, adjTrappingDays == 0) # there are some that were set for one day
 filter(adjTrappingDays, adjTrappingDays > 21) %>% print(n=200) # some that were set for a long time
 
@@ -181,42 +186,116 @@ filter(adjTrappingDays, adjTrappingDays > 21) %>% print(n=200) # some that were 
 adjTrappingDays <- adjTrappingDays %>% # drop some columns
   select(-c(trappingDays, diffTrappingDays, totalSerialBouts))
 
+# everything is the same
+
 # 1. Join trapping days to adjTrappingDays
 tidy_fielddata <- tidy_fielddata %>%
   left_join(adjTrappingDays) 
 
-filter(adjTrappingDays, !is.na(adjTrappingDays)) %>% print(n=200) # check the data
+# check the data
+tidy_fielddata %>% 
+  select(namedLocation, trappingDays, adjTrappingDays) %>% 
+  filter(!is.na(adjTrappingDays)) %>% 
+  print(n=200) # need to replace trapping days
 
 #1. Adjust the trapping days
 tidy_fielddata <- tidy_fielddata %>% 
   mutate(trappingDays = 
            case_when(!is.na(adjTrappingDays) ~ adjTrappingDays, # use adjTrappingDays
                      TRUE ~ trappingDays # otherwise just use trappingDays
-  )) %>% select(-adjTrappingDays, -setDate) # clean up the variables
+  )) %>% select(-adjTrappingDays) # clean up the variables
+
+# check the data
+# for some eventID's (bouts) collection happened over two days
+test <- select(tidy_fielddata, eventID, collectDate) %>% 
+  unique() %>%
+  group_by(eventID) %>% 
+  summarize(n())
+filter(tidy_fielddata, eventID == "ABBY201733") %>% print(n = 50)
 
 
+# 1. Change collectDate to the date that majority of traps were collected on
+Mode <- function(x) { # calculate mode of a column/vector
+  ux <- unique(x)
+  ux[which.max(tabulate(match(x, ux)))]
+}
 
 tidy_fielddata <- tidy_fielddata %>%
-  # for some eventID's (bouts) collection happened over two days,
-  # change collectDate to the date that majority of traps were collected on
   dplyr::group_by(eventID) %>%
   dplyr::mutate(collectDate = Mode(collectDate)) %>%
-  dplyr::ungroup() %>%
-  # there are also some sites for which all traps were set and collect on the same date, but have multiple eventID's
-  # we want to consider that as all one bout so we create a new ID based on the site and collectDate
-  tidyr::unite(boutID, siteID, collectDate, remove = FALSE) %>%
-  dplyr::select(-eventID) %>%
-  # join with bet_sorting, which describes the beetles in each sample
-  dplyr::left_join(beetles_raw$bet_sorting %>%
-                     # only want carabid samples, not bycatch
-                     dplyr::filter(sampleType %in% c("carabid", "other carabid")) %>%
-                     dplyr::select(sampleID, subsampleID, sampleType, taxonID,
-                                   scientificName, taxonRank, identificationReferences,
-                                   individualCount),
-                   by = "sampleID")
+  dplyr::ungroup() 
+
+# check the data
+# there are also some sites for which all traps were set and collect on the same date, but have multiple eventID's
+# we want to consider that as all one bout so we create a new ID based on the site and collectDate
 
 
+# 1. Create a boutID that identifies all trap collection events at a site in the same bout (replacing eventID).
 
+tidy_fielddata <- tidy_fielddata %>%
+  tidyr::unite(boutID, siteID, collectDate, remove = FALSE) #%>%
+  #dplyr::select(-eventID) # beetles dropped the eventID, here I keep it
+
+
+# 1. join with bet_sorting that has the beetles and bycatch in each sample
+
+tidy_sorting <- beetles_raw$bet_sorting %>% # select the variables that make the most sense to keep
+  dplyr::select(sampleID, 
+                subsampleID, 
+                sampleType, 
+                taxonID,
+                scientificName, 
+                taxonRank, 
+                identificationQualifier,
+                morphospeciesID,
+                identificationReferences,
+                individualCount,
+                nativeStatusCode,
+                remarksSorting  = remarks)
+
+# check data -  there are some sampleIDs in sorting that are not in fielddata for an unknown reason
+setdiff(unique(tidy_sorting$sampleID),unique(tidy_fielddata$sampleID))
+filter(tidy_sorting, sampleID == "KONA_007.E.20200902") # this sample is missing from fielddata (as of writing this code)
+
+# check data -  there are some sampleIDs in fielddata that are not in sorting for an unknown reason
+length(unique(tidy_fielddata$sampleID))
+length(unique(tidy_sorting$sampleID))
+dim(tidy_fulldata)[1] - dim(tidy_sorting)[1]
+
+# check data - there are a lot of sampleIDs that are NAs in the fielddata  these seem to be ones that could not be collected
+tidy_fielddata %>%
+  filter(is.na(sampleID))
+
+tidy_sorting %>%
+  filter(is.na(sampleID))
+
+
+# 1. perform full_join on fielddata and sorting to make sure to get all the sampleIDs and remove missing sampleIDs
+
+tidy_fulldata <- tidy_fielddata %>%
+  dplyr::full_join(tidy_sorting, by = "sampleID") %>%
+  filter(!is.na(sampleID)) # remove all of the sampleIDs that are NAs
+
+# check data - it seems like we have all of the sampleIDs and species from sorting joined ok
+
+length(unique(tidy_fielddata$sampleID))
+length(unique(tidy_sorting$sampleID))
+setdiff(unique(tidy_fielddata$sampleID), unique(tidy_sorting$sampleID))
+length(setdiff(unique(tidy_fielddata$sampleID), unique(tidy_sorting$sampleID)))
+dim(tidy_fulldata)[1] - dim(tidy_sorting)[1]
+
+filter(tidy_fielddata, sampleID == "BLAN_002.N.20160526") # this sample is missing from sorting (as of writing this code)
+
+test <- tidy_fulldata %>% 
+  filter(is.na(sampleType)) %>%
+  group_by(sampleID) %>%
+  summarise(n())
+
+
+# 1. Filter out the the herp_bycatch
+
+# sampleType provides the categories
+unique(tidy_sorting$sampleType)
 
 
 
