@@ -284,19 +284,74 @@ setdiff(unique(tidy_fielddata$sampleID), unique(tidy_sorting$sampleID))
 length(setdiff(unique(tidy_fielddata$sampleID), unique(tidy_sorting$sampleID)))
 dim(tidy_fulldata)[1] - dim(tidy_sorting)[1]
 
-filter(tidy_fielddata, sampleID == "BLAN_002.N.20160526") # this sample is missing from sorting (as of writing this code)
+test1 <- filter(tidy_fulldata, sampleID == "BLAN_002.N.20160526") # this sample is missing from sorting (as of writing this code)
 
 test <- tidy_fulldata %>% 
   filter(is.na(sampleType)) %>%
   group_by(sampleID) %>%
   summarise(n())
 
-
-# 1. Filter out the the herp_bycatch
+# 1. Clean up the tidy_fulldata so that it is focused on vert bycatch herp
 
 # sampleType provides the categories
-unique(tidy_sorting$sampleType)
+unique(tidy_fulldata$sampleType) # note the NAs come from the fielddata without sorting data
 
+tidy_fulldata_check <- tidy_fulldata %>% 
+  mutate(sampleType = 
+           case_when(is.na(sampleType) ~ "no data collected", # add a level for the missing sorting data
+                     TRUE ~ sampleType)) %>%
+  mutate(sampleCondition = 
+           case_when(sampleType!="vert bycatch herp" ~ NA_character_, 
+                     TRUE ~ sampleCondition)) %>%
+  mutate(samplingImpractical = 
+           case_when(sampleType!="vert bycatch herp" ~ NA_character_, 
+                     TRUE ~ samplingImpractical)) %>%
+  mutate(remarksFielddata = 
+           case_when(sampleType!="vert bycatch herp" ~ NA_character_, 
+                     TRUE ~ remarksFielddata)) %>%
+  mutate(subsampleID = 
+           case_when(sampleType!="vert bycatch herp" ~ NA_character_, 
+                     TRUE ~ subsampleID)) %>%
+  mutate(taxonID = 
+           case_when(sampleType!="vert bycatch herp" ~ NA_character_, 
+                     TRUE ~ taxonID)) %>% 
+  mutate(taxonRank = 
+           case_when(sampleType!="vert bycatch herp" ~ NA_character_, 
+                     TRUE ~ taxonRank)) %>% 
+  mutate(scientificName = 
+           case_when(sampleType!="vert bycatch herp" ~ NA_character_, 
+                     TRUE ~ scientificName)) %>% 
+  mutate(identificationQualifier = 
+           case_when(sampleType!="vert bycatch herp" ~ NA_character_, 
+                     TRUE ~ identificationQualifier)) %>% 
+  mutate(morphospeciesID = 
+           case_when(sampleType!="vert bycatch herp" ~ NA_character_, 
+                     TRUE ~ morphospeciesID)) %>% 
+  mutate(identificationReferences = 
+           case_when(sampleType!="vert bycatch herp" ~ NA_character_, 
+                     TRUE ~ identificationReferences)) %>% 
+  mutate(nativeStatusCode = 
+           case_when(sampleType!="vert bycatch herp" ~ NA_character_, 
+                     TRUE ~ nativeStatusCode)) %>%
+  mutate(remarksSorting = 
+           case_when(sampleType!="vert bycatch herp" ~ NA_character_, 
+                     TRUE ~ remarksSorting)) 
+# 1. Decide if you don't care about any of the other sampleTypes
+
+if(TRUE) # group all nonherps 
+{
+test <-  tidy_fulldata_check  %>%
+  mutate(sampleType = 
+           case_when(sampleType !="vert bycatch herp" ~ "not herp", # add a level for the missing sorting data
+                     TRUE ~ sampleType))
+test %>% dplyr::select(sampleID, sampleType, scientificName, individualCount) %>%
+  group_by(sampleID, sampleType, scientificName) %>% arrange(sampleID) %>%
+  mutate(individualCount_sum = sum(individualCount, na.rm = TRUE))
+  
+  
+}
+
+%>% unique()
 
 
 # STOPPED HERE STOPPED HERE
