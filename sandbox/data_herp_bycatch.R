@@ -14,23 +14,6 @@
 #'    - "not herp" - this is a aggregate of all the other types "other carabid", "invert bycatch", "carabid", "vert bycatch mam"
 #'
 #' @format A data frame (tibble) with the following columns:
-#' - `sampleID`: Identifier for sample. See `bet_variables`
-
-#' - `setDate`: Date that trap was set.
-#' - `collectDate`: Date of the collection event.
-#' - `trappingDays`: Decimal days between trap setting and collecting events.
-#' - `nativeStatusCode`: The process by which the taxon became established in the location.
-#' 'A': Presumed absent, due to lack of data indicating a taxon's presence in a given location;
-#' 'N': Native; 'I': Introduced; 'UNK': Status unknown.
-#' - `identificationSource`: Source of identification.
-#' - `taxonID`: Species code, based on one or more sources.
-#' - `taxonRank`: The lowest level taxonomic rank that can be determined for the individual or specimen.
-#' - `scientificName`: Scientific name, associated with the taxonID. This is the name of the lowest level taxonomic rank that can be determined.
-#' - `count`: Number of individuals. `NA` represents no beetles catche in the trap.
-
-
-#' See `bet_variables` for metadata on these variables
-
 #' - `namedLocation`: Name of the measurement location in the NEON database.
 #' - `domainID`: Unique identifier of the NEON domain where the site is located.
 #' - `boutID`: Identifies all trap collection events at a site in the same bout.
@@ -46,70 +29,36 @@
 #' - `eventID`: Cleaned up identifier for the set of information associated with the event, which includes information about the place and time of the event
 #' - `trappingDays`: Cleaned up decimal days between trap setting and collecting events
 #' - `sampleCollected`: Indicator of whether a sample was collected
-#' - `sampleID`: Identifier for sample.
+#' - `sampleID`: Identifier for sample
 #' - `sampleCondition`: Condition of a sample
 #' - `samplingImpractical`: Samples and/or measurements were not collected due to the indicated circumstance
 #' - `remarksFielddata`: Technician notes; free text comments accompanying the record from fielddata table
 #' - `eventID_raw`: Identifier for the set of information associated with the event, which includes information about the place and time of the event
 #' - `subsampleID`: Unique identifier associated with each subsample per sampleID
-#' - `sampleType`: 
-#' - `taxonID`: 
-#' - `scientificName`: 
-#' - `taxonRank`: 
-#' - `identificationQualifier`: 
-#' - `morphospeciesID`: 
-#' - `identificationReferences`: 
-#' - `individualCount`: 
-#' - `nativeStatusCode`: 
+#' - `sampleType`: Type of sample with categories: vert bycatch herp, no data collected, not herp
+#' - `taxonID`: Species code, based on one or more sources only provided for vert bycatch herp
+#' - `scientificName`: Scientific name, associated with the taxonID. This is the name of the lowest level taxonomic rank that can be determined only provided for vert bycatch herp
+#' - `taxonRank`: The lowest level taxonomic rank that can be determined for the individual or specimen only provided for vert bycatch herp
+#' - `identificationQualifier`: A standard term to express the determiner's doubts about the Identification only provided for vert bycatch herp
+#' - `morphospeciesID`: Identifier for morphospecies only provided for vert bycatch herp
+#' - `identificationReferences`: A list of sources (concatenated and semicolon separated) used to derive the specific taxon concept; including field guide editions, books, or versions of NEON keys used only provided for vert bycatch herp
+#' - `individualCount`: Number of individuals of the same type, summed across types for all sampleTypes but vert bycatch herp
+#' - `nativeStatusCode`: 	The process by which the taxon became established in the location only provided for vert bycatch herp
 #' - `remarksSorting`: Technician notes; free text comments accompanying the record from sorting table
-
-
 #'
-#' @author Kari Norman
+#' See `bet_variables` for more metadata on these variables
+#' @note  also see data_beetles
 #'
-"data_beetle"
-
-
-# STOPPED HERE 
-#' 1. Removed 1 m^2 data with `targetTaxaPresent = N`
-#' 2. Removed rows without plotID, subplotID, boutNumber, endDate, and/or taxonID
-#' 3. Removed duplicate taxa between nested subplots (each taxon should be represented once for the bout/plotID/year). For example, if a taxon/date/bout/plot combo is present in 1 m^2 data, remove from 10 m^2 and above
-#' 4. Stacked species occurrence from different scales into a long data frame. Therefore,
-#'     + to get the species list at 1 m^2 scale, we need all the data with `sample_area_m2 == 1` (e.g. `dplyr::filter(plants, sample_area_m2 == 1)`); the unique sample unit id can then be generated with `paste(plants$plotID, plants$subplot_id, plants$subsubplot_id, sep = "_")`
-#'     + to get the species list at 10 m^2 scale, we need all the data with `sample_area_m2 <= 10` (e.g. `dplyr::filter(plants, sample_area_m2 <= 10)`); the unique sample unit id can then be generated with `paste(plants$plotID, plants$subplot_id, plants$subsubplot_id, sep = "_")`
-#'     + to get the species list at 100 m^2 scale, we need use the whole data set since the maximum value of `sample_area_m2` is 100 (i.e. a 10 m by 10 m subplot); the unique sample unit id can then be generated with `paste(plants$plotID, plants$subplot_id, sep = "_")`
-#'     + to get the species list at 400 m^2 scale (i.e. one plot with four subplots), we need aggregate the data at `plotID` level (the sample unit is the plot now).
 #'
-#' @note  Details of locations (e.g. latitude/longitude coordinates can be found in [neon_locations]).
-#' @format A data frame (also a tibble) with the following columns:
-#'
-#' - `namedLocation`: Name of the measurement location in the NEON database.
-#' - `siteID`: NEON site code.
-#' - `plotID`: Plot identifier (NEON site code_XXX).
-#' - `subplotID`: This is the NEON provided subplot ID in the format of `subplot_id`, then `subsubplot_id` and 1 or 10 (m^2); if the sampling unit is 100 m^2, the values are 31, 32, 40, and 41.
-#' - `boutNumber`: Number of sampling bout, mostly just 1.
-#' - `year`: Observation year.
-#' - `endDate`: The end date-time or interval during which an event occurred.
-#' - `taxonID`: Species code, based on one or more sources.
-#' - `scientificName`: Scientific name, associated with the taxonID. This is the name of the lowest level taxonomic rank that can be determined.
-#' - `taxonRank`: The rank of `scientificName`; some of them are genus levels (we filtered out higher ranks already).
-#' - `family`: The family of the species.
-#' - `nativeStatusCode`: Whether the species is a native or non-native species. 'A': Presumed absent, due to lack of data indicating a taxon's presence in a given location; 'N': Native; 'N?': Probably Native; 'I': Introduced; 'I?': Probably Introduced; 'NI': Native and Introduced, some infrataxa are native and others are introduced; 'NI?': Probably Native and Introduced, some infrataxa are native and others are introduced; 'UNK': Status unknown.
-#' - `percentCover`: Ocular estimate of cover of the index (e.g., species) as a percent within 1 m^2 subsubplots.
-#' - `heightPlantOver300cm`: Indicator of whether individuals of the species in the sample are taller than 300 cm.
-#' - `heightPlantSpecies`: Ocular estimate of the height (centimeter) of the plant species.
-#' - `sample_area_m2`: The area of the sampling unit that the observed plant was located in.
-#' - `subplot_id`: Subplot ID; one plot normally has four 100 m^2 subplots (31, 32, 40, 41).
-#' - `subsubplot_id`: Subsubplot ID (1, 2, 3, 4) for sampling units at 1 m^2 or 10 m^2.
-# STOPPED HERE 
-
 #'
 #' @source <https://data.neonscience.org>
 #' @references Hoekman, David, Katherine E. LeVan, Cara Gibson, George E. Ball, Robert A. Browne, Robert L. Davidson, Terry L. Erwin, et al. “Design for Ground Beetle Abundance and Diversity Sampling within the National Ecological Observatory Network.” Ecosphere 8, no. 4 (2017): e01744.
+#' @author Matt Helmus and Kari Norman
+
+#' @importFrom tibble tibble
 
 "data_herp_bycatch"
 
-#' @importFrom tibble tibble
 NULL
 
 
