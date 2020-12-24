@@ -13,6 +13,9 @@
 #'    - "no data collected" - these samples in fielddata not in sorting 
 #'    - "not herp" - this is a aggregate of all the other types "other carabid", "invert bycatch", "carabid", "vert bycatch mam"
 #'
+#' @note  This script was derived from the script written by Kari Norman to process the pit fall traps of beetles.
+#' Additional variables were added and missing samples were retained in herp_bycatch. By filtering on sampleType 
+#' the user can derive a data set that include only samples with herps or samples with herps and not herps.
 #' @format A data frame (tibble) with the following columns:
 #' - `namedLocation`: Name of the measurement location in the NEON database.
 #' - `domainID`: Unique identifier of the NEON domain where the site is located.
@@ -47,37 +50,35 @@
 #' - `remarksSorting`: Technician notes; free text comments accompanying the record from sorting table
 #'
 #' See `bet_variables` for more metadata on these variables
-#' @note  also see data_beetles
-#'
-#'
 #'
 #' @source <https://data.neonscience.org>
 #' @references Hoekman, David, Katherine E. LeVan, Cara Gibson, George E. Ball, Robert A. Browne, Robert L. Davidson, Terry L. Erwin, et al. “Design for Ground Beetle Abundance and Diversity Sampling within the National Ecological Observatory Network.” Ecosphere 8, no. 4 (2017): e01744.
 #' @author Matt Helmus and Kari Norman
-
-#' @importFrom tibble tibble
-
 "data_herp_bycatch"
-
 NULL
 
 
 #################################################################################
 map_neon_data_to_ecocomDP.HERP <- function(neon.data.product.id = "DP1.10022.001",
                                            ...) {
-  # authors: Matt Helmus (mrhelmus@temple.edu) repurposing of Kari Norman's beetle code
+  # authors: Matt Helmus (mrhelmus@temple.edu) repurposed Kari Norman's beetle code
+  
+  ### Setup ####
   
   #library(tidyverse)
   #library(neonUtilities)
   #library(devtools)
+  # bycatch_raw <- beetles_raw <- beetles_raw_big # if you already have the full data product in memory
+  #neon.data.product.id <- 'DP1.10022.001' # beetle dpid to get herp bycatch
   
-  neon.data.product.id <- 'DP1.10022.001' # beetle dpid to get herp bycatch
-  chkdata <- FALSE
-  group_nonherps <- TRUE
-  herps_only <- FALSE
-  # bycatch_raw <- beetles_raw <- beetles_raw_big
+  # Switches to run when editing the code
+  chkdata <- FALSE # run the code that checks the data
+  group_nonherps <- TRUE # run the code that aggregates the non-herps into sampleType:not herp
+  herps_only <- FALSE # run the code that only gives you the samples with herps
+  print_summary <- FALSE # print a summary table of the data
   
   #### Get the Data ####
+  
   bycatch_raw <- neonUtilities::loadByProduct(dpID = neon.data.product.id,
                                               check.size = FALSE#,
                                               # if there is a problem with code then use expanded
@@ -151,6 +152,7 @@ map_neon_data_to_ecocomDP.HERP <- function(neon.data.product.id = "DP1.10022.001
   if(chkdata){
     print(paste("The max serial bouts for any trap is", max(adjTrappingDays$totalSerialBouts)))
   }
+  
   #1. take the difference and use this as the new trapping days
   adjTrappingDays <- adjTrappingDays %>%
     mutate(diffTrappingDays = # as long as there are only 2 bouts this works
@@ -223,6 +225,8 @@ map_neon_data_to_ecocomDP.HERP <- function(neon.data.product.id = "DP1.10022.001
   #dplyr::select(-eventID) # beetles dropped the eventID, here I keep it
   
   
+  ### Wrangle the Sorting data ###
+  
   # 1. join with bet_sorting that has the bycatch in each sample
   
   tidy_sorting <- beetles_raw$bet_sorting %>% # select the variables that make the most sense to keep
@@ -280,6 +284,7 @@ map_neon_data_to_ecocomDP.HERP <- function(neon.data.product.id = "DP1.10022.001
       group_by(sampleID) %>%
       summarise(n())
   }
+  
   # 1. Clean up the tidy_fulldata so that it is focused on vert bycatch herp
   
   # sampleType provides the categories
@@ -325,6 +330,7 @@ map_neon_data_to_ecocomDP.HERP <- function(neon.data.product.id = "DP1.10022.001
     mutate(remarksSorting = 
              case_when(sampleType!="vert bycatch herp" ~ NA_character_, 
                        TRUE ~ remarksSorting)) 
+  
   # 1. Decide if you don't care about any of the other sampleTypes
   
   if(group_nonherps) # group all nonherps 
@@ -349,24 +355,26 @@ map_neon_data_to_ecocomDP.HERP <- function(neon.data.product.id = "DP1.10022.001
     tidy_fulldata %>% filter(!is.na(morphospeciesID))
   }
   
+  #1. Do you only want samples with herps?
   if(herps_only) {
     tidy_fulldata <- tidy_fulldata %>% filter(sampleType == "vert bycatch herp")
   }
   
   # check data - output a summary table of the data  
-  if(TRUE) {
+  if(print_summary) {
     tidy_fulldata %>% 
       group_by(siteID) %>% 
       filter(sampleType == "vert bycatch herp") %>%
       summarise( 'herp species richness' = n_distinct(scientificName, na.rm = TRUE),
                  'herp individualCount total' = sum(individualCount), 
-                  '# traps with herps' = n_distinct(sampleID)) %>% print(n = 100)
+                 '# traps with herps' = n_distinct(sampleID)) %>% print(n = 100)
   }
-
-  # these NAs are from the sorting data that is not in the fielddata
+  
+  # these NA rows are from the sorting data that is not in the fielddata
   if(chkdata) tidy_fulldata %>% filter(is.na(siteID))
   
   return(tidy_fulldata)
 }
+
 
 
